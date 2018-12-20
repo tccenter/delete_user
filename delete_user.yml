@@ -1,0 +1,24 @@
+---
+- name: Delete user {{ user  }} from network devices
+  hosts: "{{ hosts | default('all') }}"
+  gather_facts: no
+  tasks:
+   - name: cheak {{ user }} on ios devices
+     ios_command:
+       commands: sh running-config | include {{ user }}
+     when: ansible_network_os == "ios"
+     register: output
+     tags:
+       - cheak_user_ios
+   - debug: var=output['stdout'][0]
+     tags:
+       - debug
+   - name: delete {{ user }} on ios devices
+     ios_config:
+       lines: 
+         - "{{ output['stdout'][0] }}"
+       save_when: modified
+     when: "'{{ user }}' in output['stdout'][0]"
+     tags:
+       - delete_user_ios
+   
