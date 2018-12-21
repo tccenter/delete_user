@@ -1,1 +1,1 @@
-# delete_user
+# Ansible playbook for delete user form network devices
