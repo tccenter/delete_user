@@ -3,18 +3,32 @@
   hosts: "{{ hosts | default('all') }}"
   gather_facts: no
   vars:
-    change: false
     ansible_command_timeout: 60
   tasks:
    - name: cheak {{ user }} on ios devices
      ios_command:
        commands: sh running-config | include username {{ user }}
      when: ansible_network_os == "ios"
-     register: output
+     register: check_output_ios
      tags:
        - cheak_user
 
-   - debug: var=output['stdout'][0]
+   - name: cheak {{ user }} on asa devices
+     asa_command:
+       commands:
+         - sh running-config | include username {{ user }}
+     when: ansible_network_os == "asa"
+     register: check_output_asa
+     tags:
+       - cheak_user
+
+   - debug: var=check_output_ios['stdout'][0]
+     when: ansible_network_os == "ios"
+     tags:
+       - debug
+
+   - debug: var=check_output_asa['stdout'][0]
+     when: ansible_network_os == "asa"
      tags:
        - debug
 
@@ -23,21 +37,34 @@
        aggregate:
          - name: "{{ user }}"
        state: absent
-     register: log
-     when: ansible_network_os == "ios" and output['stdout'][0] | length != 0
+     register: delete_output_ios
+     when: ansible_network_os == "ios" and check_output_ios['stdout'][0] | length != 0
+     tags:
+       - delete_user
+   
+   - name: delete {{ user }} on asa devices
+     asa_config:
+       lines:
+         - "no {{ check_output_asa['stdout'][0] }}"
+       save: yes
+     when: ansible_network_os == "asa" and check_output_asa['stdout'][0] | length != 0
+     register: delete_output_asa
      tags:
        - delete_user
 
-   - set_fact: change=true
-
-   - debug: var=log['commands'][0]
-     when: ansible_network_os == "ios" and output['stdout'][0] | length != 0
+   - debug: var=delete_output_ios['commands'][0]
+     when: ansible_network_os == "ios" and check_output_ios['stdout'][0] | length != 0
      tags:
        - debug
 
-   - name: write configuration
+   - debug: var=delete_output_asa['updates'][0]
+     when: ansible_network_os == "asa" and check_output_asa['stdout'][0] | length != 0
+     tags:
+       - debug
+
+   - name: write configuration on ios devices
      ios_command:
        commands: write
-     when: ansible_network_os == "ios" and output['stdout'][0] | length != 0 and change
+     when: ansible_network_os == "ios" and check_output_ios['stdout'][0] | length != 0
      tags:
        - cfg_write
